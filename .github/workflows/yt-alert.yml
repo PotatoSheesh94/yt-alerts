@@ -20,7 +20,7 @@ jobs:
 
       - name: Poll RSS and notify Discord
         env:
-          CHANNEL_ID: "1516964821650636841"
+          CHANNEL_ID: "UC8q4duHu0446CUUsUUjgZGw"
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           python3 << 'EOF'
