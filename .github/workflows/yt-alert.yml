@@ -21,18 +21,20 @@ jobs:
       - name: Poll RSS and notify Discord
         env:
           CHANNEL_ID: "UC8q4duHu0446CUUsUUjgZGw"
+          CHANNEL_NAME: "NumbTheSkulls"
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           python3 << 'EOF'
           import json, os, urllib.request, xml.etree.ElementTree as ET
 
-          ch  = os.environ['CHANNEL_ID']
-          wh  = os.environ['WEBHOOK']
-          sf  = 'seen.json'
-          ns  = {'a':'http://www.w3.org/2005/Atom',
-                 'yt':'http://www.youtube.com/xml/schemas/2015',
-                 'm':'http://search.yahoo.com/mrss/'}
-          url = f'https://www.youtube.com/feeds/videos.xml?channel_id={ch}'
+          ch    = os.environ['CHANNEL_ID']
+          cname = os.environ['CHANNEL_NAME']
+          wh    = os.environ['WEBHOOK']
+          sf    = 'seen.json'
+          ns    = {'a':'http://www.w3.org/2005/Atom',
+                   'yt':'http://www.youtube.com/xml/schemas/2015',
+                   'm':'http://search.yahoo.com/mrss/'}
+          url   = f'https://www.youtube.com/feeds/videos.xml?channel_id={ch}'
 
           root = ET.fromstring(urllib.request.urlopen(url, timeout=20).read())
           seen = set(json.load(open(sf))) if os.path.exists(sf) else set()
@@ -42,25 +44,41 @@ jobs:
               vid   = e.findtext('yt:videoId', namespaces=ns)
               title = e.findtext('a:title', namespaces=ns) or 'New video'
               link  = e.find('a:link', ns).get('href')
-              pub   = e.findtext('a:published', namespaces=ns)
-              g     = e.find('m:group', ns)
-              thumb = g.find('m:thumbnail', ns).get('url') if g is not None else None
 
               if vid in seen:
                   continue
               seen.add(vid)
 
-              if not first:
-                  embed = {'title': title[:256], 'url': link,
-                           'color': 16711680, 'timestamp': pub}
-                  if thumb:
-                      embed['image'] = {'url': thumb}
-                  body = json.dumps({'username': 'YouTube Alerts',
-                                     'embeds': [embed]}).encode()
-                  req = urllib.request.Request(wh, body,
-                          {'Content-Type': 'application/json'})
-                  urllib.request.urlopen(req, timeout=15)
-                  print(f'Posted: {title}')
+              if first:
+                  continue
+
+              # Detect live stream
+              status = e.find('m:status', ns)
+              is_live = (status is not None and
+                         status.get('{http://www.w3.org/2005/Atom}state') == 'streaming' or
+                         (status is not None and
+                          status.get('{http://www.youtube.com/xml/schemas/2015}state') == 'streaming'))
+
+              # Fallback: check for live attribute directly
+              if status is not None:
+                  for attr, val in status.attrib.items():
+                      if val == 'streaming':
+                          is_live = True
+
+              if is_live:
+                  content = (f"📢 <@&1524609417637531718> {cname} is LIVE on YouTube! "
+                             f"Go check it out 👇\n{link}")
+              else:
+                  content = (f"📢 <@&1524609417637531718> {cname} just posted something "
+                             f"new on YouTube! Go check it out 👇\n{link}")
+
+              body = json.dumps({'username': 'YouTube Alerts',
+                                 'content': content}).encode()
+              req = urllib.request.Request(wh, body,
+                      {'Content-Type': 'application/json'})
+              urllib.request.urlopen(req, timeout=15)
+              label = "LIVE" if is_live else "Upload"
+              print(f'Posted ({label}): {title}')
 
           json.dump(list(seen)[-500:], open(sf, 'w'))
           EOF
