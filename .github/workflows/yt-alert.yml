@@ -66,10 +66,10 @@ jobs:
                           is_live = True
 
               if is_live:
-                  content = (f"📢 <@&1524609417637531718> {cname} is LIVE on YouTube! "
+                  content = (f"📢 <@&1549756171622158516> {cname} is LIVE on YouTube! "
                              f"Go check it out 👇\n{link}")
               else:
-                  content = (f"📢 <@&1524609417637531718> {cname} just posted something "
+                  content = (f"📢 <@&1549756171622158516> {cname} just posted something "
                              f"new on YouTube! Go check it out 👇\n{link}")
 
               body = json.dumps({'username': 'YouTube Alerts',
