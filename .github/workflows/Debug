@@ -1,0 +1,4 @@
+- name: Debug
+  run: |
+    echo "Raw length: $(echo -n "${{ secrets.WEBHOOK_URL }}" | wc -c)"
+    echo "Stripped length: $(echo -n "${{ secrets.WEBHOOK_URL }}" | tr -d '\n' | wc -c)"   
