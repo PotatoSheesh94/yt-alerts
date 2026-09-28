@@ -29,16 +29,6 @@ jobs:
           key   = os.environ['YT_API_KEY']
           sf    = 'seen.json'
 
-          # --- DEBUG: test message ---
-          test_body = json.dumps({'username': 'YouTube Alerts',
-                                  'content': '✅ Test: workflow is running.'}).encode()
-          test_req = urllib.request.Request(wh, test_body,
-                  {'Content-Type': 'application/json',
-                   'User-Agent': 'YouTubeAlerts/1.0 (github-actions)'})
-          urllib.request.urlopen(test_req, timeout=15)
-          print('Test message sent.')
-          # --- END DEBUG ---
-
           url = (f'https://www.googleapis.com/youtube/v3/playlistItems'
                  f'?part=snippet&playlistId={pl}&maxResults=5&key={key}')
 
