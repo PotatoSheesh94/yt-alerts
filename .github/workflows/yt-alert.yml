@@ -78,7 +78,7 @@ jobs:
 
       - name: Run
         env:
-          PLAYLIST_ID: UU8q4duHu0446CUUsUUjgZGw
+          PLAYLIST_ID: ${{ secrets.YT_PLAYLIST_ID }}
           CHANNEL_NAME: ${{ secrets.YT_CHANNEL_NAME }}
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           YT_API_KEY: ${{ secrets.YT_API_KEY }}
