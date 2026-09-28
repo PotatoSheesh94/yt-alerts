@@ -21,7 +21,10 @@ jobs:
 
           url = os.environ["DISCORD_WEBHOOK"].strip()
           data = json.dumps({"content": "test"}).encode()
-          req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+          req = urllib.request.Request(url, data=data, headers={
+              "Content-Type": "application/json",
+              "User-Agent": "MyBot/1.0 (github-actions)"
+          })
           urllib.request.urlopen(req)
           print("Success")
           EOF
