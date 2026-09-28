@@ -13,6 +13,8 @@ jobs:
           echo "Stripped length: $(echo -n "${{ secrets.DISCORD_WEBHOOK }}" | tr -d '\n' | wc -c)"
 
       - name: Send
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           python3 << 'EOF'
           import os, json, urllib.request
