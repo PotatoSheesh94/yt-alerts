@@ -29,7 +29,7 @@ jobs:
 
           ch    = os.environ['CHANNEL_ID']
           cname = os.environ['CHANNEL_NAME']
-          wh    = os.environ['WEBHOOK']
+          wh    = os.environ['WEBHOOK'].strip()
           sf    = 'seen.json'
           ns    = {'a':'http://www.w3.org/2005/Atom',
                    'yt':'http://www.youtube.com/xml/schemas/2015',
@@ -69,7 +69,8 @@ jobs:
               body = json.dumps({'username': 'YouTube Alerts',
                                  'content': content}).encode()
               req = urllib.request.Request(wh, body,
-                      {'Content-Type': 'application/json'})
+                      {'Content-Type': 'application/json',
+                       'User-Agent': 'YouTubeAlerts/1.0 (github-actions)'})
               urllib.request.urlopen(req, timeout=15)
               label = "LIVE" if is_live else "Upload"
               print(f'Posted ({label}): {title}')
