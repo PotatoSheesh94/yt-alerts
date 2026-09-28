@@ -18,14 +18,9 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Poll uploads and notify Discord
-        env:
-          PLAYLIST_ID: UU8q4duHu0446CUUsUUjgZGw
-          CHANNEL_NAME: ${{ secrets.YT_CHANNEL_NAME }}
-          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+      - name: Write script
         run: |
-          python3 << 'PYEOF'
+          cat > poll.py << 'SCRIPT'
           import json, os, urllib.request
 
           pl    = os.environ['PLAYLIST_ID']
@@ -69,4 +64,13 @@ jobs:
               print(f'Posted: {title}')
 
           json.dump(list(seen)[-500:], open(sf, 'w'))
-          PYEOF   
+          SCRIPT
+
+      - name: Run
+        env:
+          PLAYLIST_ID: UU8q4duHu0446CUUsUUjgZGw
+          CHANNEL_NAME: ${{ secrets.YT_CHANNEL_NAME }}
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+        run: |
+          python3 poll.py
