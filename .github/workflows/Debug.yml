@@ -1,4 +1,11 @@
-- name: Debug
-  run: |
-    echo "Raw length: $(echo -n "${{ secrets.WEBHOOK_URL }}" | wc -c)"
-    echo "Stripped length: $(echo -n "${{ secrets.WEBHOOK_URL }}" | tr -d '\n' | wc -c)"   
+      - name: Send
+        run: |
+          python3 << 'EOF'
+          import os, json, urllib.request
+
+          url = os.environ["WEBHOOK_URL"].strip()
+          data = json.dumps({"content": "test"}).encode()
+          req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+          urllib.request.urlopen(req)
+          print("Success")
+          EOF
