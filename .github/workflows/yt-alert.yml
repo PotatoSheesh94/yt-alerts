@@ -52,8 +52,26 @@ jobs:
               if first:
                   continue
 
-              content = (f"📢 <@&1549756171622158516> {cname} just posted something "
-                         f"new on YouTube! Go check it out 👇\n{link}")
+              is_live = False
+              vurl = (f'https://www.googleapis.com/youtube/v3/videos'
+                      f'?part=status&id={vid}&key={key}')
+              vreq = urllib.request.Request(vurl, headers={
+                  'User-Agent': 'YouTubeAlerts/1.0 (github-actions)'
+              })
+              vdata = json.loads(urllib.request.urlopen(vreq, timeout=15).read())
+              if vdata.get('items'):
+                  status = vdata['items'][0].get('status', {})
+                  if status.get('liveStreamability') == 'liveStreamable':
+                      lsd = status.get('liveStreamDetails', {})
+                      if lsd.get('actualStartTime') and not lsd.get('actualEndTime'):
+                          is_live = True
+
+              if is_live:
+                  content = (f"📢 <@&1549756171622158516> {cname} is LIVE on YouTube! "
+                             f"Go check it out 👇\n{link}")
+              else:
+                  content = (f"📢 <@&1549756171622158516> {cname} just posted something "
+                             f"new on YouTube! Go check it out 👇\n{link}")
 
               body = json.dumps({'username': 'YouTube Alerts',
                                  'content': content}).encode()
@@ -61,7 +79,8 @@ jobs:
                       {'Content-Type': 'application/json',
                        'User-Agent': 'YouTubeAlerts/1.0 (github-actions)'})
               urllib.request.urlopen(wh_req, timeout=15)
-              print(f'Posted: {title}')
+              label = "LIVE" if is_live else "Upload"
+              print(f'Posted ({label}): {title}')
 
           json.dump(list(seen)[-500:], open(sf, 'w'))
           SCRIPT
