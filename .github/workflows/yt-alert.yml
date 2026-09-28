@@ -12,16 +12,16 @@ jobs:
   poll:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
       - name: Poll RSS and notify Discord
         env:
-          CHANNEL_ID: "UC8q4duHu0446CUUsUUjgZGw"
-          CHANNEL_NAME: "NumbTheSkulls"
+          CHANNEL_ID: ${{ secrets.YT_CHANNEL_ID }}
+          CHANNEL_NAME: ${{ secrets.YT_CHANNEL_NAME }}
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           python3 << 'EOF'
@@ -52,14 +52,8 @@ jobs:
               if first:
                   continue
 
-              # Detect live stream
               status = e.find('m:status', ns)
-              is_live = (status is not None and
-                         status.get('{http://www.w3.org/2005/Atom}state') == 'streaming' or
-                         (status is not None and
-                          status.get('{http://www.youtube.com/xml/schemas/2015}state') == 'streaming'))
-
-              # Fallback: check for live attribute directly
+              is_live = False
               if status is not None:
                   for attr, val in status.attrib.items():
                       if val == 'streaming':
