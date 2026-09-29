@@ -11,81 +11,241 @@ permissions:
 jobs:
   poll:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v7
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Write script
+      - name: Write notification script
         run: |
           cat > poll.py << 'SCRIPT'
-          import json, os, urllib.request
+          import json
+          import os
+          import urllib.request
+          import urllib.error
 
-          pl    = os.environ['PLAYLIST_ID']
-          cname = os.environ['CHANNEL_NAME']
-          wh    = os.environ['WEBHOOK'].strip()
-          key   = os.environ['YT_API_KEY']
-          sf    = 'seen.json'
+          PLAYLIST_ID = os.environ["PLAYLIST_ID"]
+          CHANNEL_NAME = os.environ["CHANNEL_NAME"]
+          WEBHOOK = os.environ["WEBHOOK"].strip()
+          API_KEY = os.environ["YT_API_KEY"]
 
-          url = (f'https://www.googleapis.com/youtube/v3/playlistItems'
-                 f'?part=snippet&playlistId={pl}&maxResults=5&key={key}')
+          SEEN_FILE = "seen.json"
+          ROLE_ID = "1549756171622158516"
 
-          req = urllib.request.Request(url, headers={
-              'User-Agent': 'YouTubeAlerts/1.0 (github-actions)'
-          })
-          data = json.loads(urllib.request.urlopen(req, timeout=20).read())
+          def get_json(url):
+              req = urllib.request.Request(
+                  url,
+                  headers={
+                      "User-Agent": "YouTubeAlerts/1.0 (GitHub Actions)"
+                  }
+              )
 
-          seen = set(json.load(open(sf))) if os.path.exists(sf) else set()
-          first = not seen
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as response:
+                      return json.loads(response.read())
+              except urllib.error.HTTPError as e:
+                  print(f"YouTube API HTTP error: {e.code}")
+                  print(e.read().decode(errors="ignore"))
+                  raise
+              except Exception as e:
+                  print(f"Request failed: {e}")
+                  raise
 
-          for item in data.get('items', []):
-              vid   = item['snippet']['resourceId']['videoId']
-              title = item['snippet']['title']
-              link  = f'https://www.youtube.com/watch?v={vid}'
+          # --------------------------------------------------
+          # Load previously seen videos
+          # --------------------------------------------------
 
-              if vid in seen:
+          if os.path.exists(SEEN_FILE):
+              try:
+                  with open(SEEN_FILE, "r") as f:
+                      seen = set(json.load(f))
+              except Exception:
+                  print("seen.json could not be read. Starting fresh.")
+                  seen = set()
+          else:
+              seen = set()
+
+          first_run = not bool(seen)
+
+          print(f"Previously seen videos: {len(seen)}")
+          print(f"First run: {first_run}")
+
+          # --------------------------------------------------
+          # Get latest videos from playlist
+          # --------------------------------------------------
+
+          playlist_url = (
+              "https://www.googleapis.com/youtube/v3/playlistItems"
+              f"?part=snippet&playlistId={PLAYLIST_ID}"
+              f"&maxResults=10&key={API_KEY}"
+          )
+
+          data = get_json(playlist_url)
+
+          items = data.get("items", [])
+
+          print(f"Videos returned by YouTube: {len(items)}")
+
+          # --------------------------------------------------
+          # Process videos
+          # --------------------------------------------------
+
+          new_videos = []
+
+          for item in items:
+              snippet = item.get("snippet", {})
+              resource = snippet.get("resourceId", {})
+
+              video_id = resource.get("videoId")
+
+              if not video_id:
                   continue
-              seen.add(vid)
 
-              if first:
+              title = snippet.get("title", "Untitled")
+              link = f"https://www.youtube.com/watch?v={video_id}"
+
+              # Already processed
+              if video_id in seen:
                   continue
+
+              print(f"New video found: {title}")
+
+              # Mark it as seen immediately
+              seen.add(video_id)
+              new_videos.append(video_id)
+
+              # --------------------------------------------------
+              # Do not notify on the first run.
+              # This prevents old videos from spamming Discord.
+              # --------------------------------------------------
+
+              if first_run:
+                  print(f"First run - adding without notification: {title}")
+                  continue
+
+              # --------------------------------------------------
+              # Check whether the video is currently live
+              # --------------------------------------------------
 
               is_live = False
-              vurl = (f'https://www.googleapis.com/youtube/v3/videos'
-                      f'?part=status&id={vid}&key={key}')
-              vreq = urllib.request.Request(vurl, headers={
-                  'User-Agent': 'YouTubeAlerts/1.0 (github-actions)'
-              })
-              vdata = json.loads(urllib.request.urlopen(vreq, timeout=15).read())
-              if vdata.get('items'):
-                  status = vdata['items'][0].get('status', {})
-                  if status.get('liveStreamability') == 'liveStreamable':
-                      lsd = status.get('liveStreamDetails', {})
-                      if lsd.get('actualStartTime') and not lsd.get('actualEndTime'):
-                          is_live = True
+
+              video_url = (
+                  "https://www.googleapis.com/youtube/v3/videos"
+                  f"?part=snippet,liveStreamingDetails"
+                  f"&id={video_id}&key={API_KEY}"
+              )
+
+              video_data = get_json(video_url)
+
+              if video_data.get("items"):
+                  video = video_data["items"][0]
+
+                  live_details = video.get(
+                      "liveStreamingDetails",
+                      {}
+                  )
+
+                  actual_start = live_details.get("actualStartTime")
+                  actual_end = live_details.get("actualEndTime")
+
+                  if actual_start and not actual_end:
+                      is_live = True
+
+              # --------------------------------------------------
+              # Build Discord notification
+              # --------------------------------------------------
 
               if is_live:
-                  content = (f"📢 <@&1549756171622158516> {cname} is LIVE on YouTube! "
-                             f"Go check it out 👇\n{link}")
+                  content = (
+                      f"📢 <@&{ROLE_ID}> "
+                      f"**{CHANNEL_NAME} is LIVE on YouTube!**\n"
+                      f"Go check it out 👇\n"
+                      f"{link}"
+                  )
+
               else:
-                  content = (f"📢 <@&1549756171622158516> {cname} just posted something "
-                             f"new on YouTube! Go check it out 👇\n{link}")
+                  content = (
+                      f"📢 <@&{ROLE_ID}> "
+                      f"**{CHANNEL_NAME} just posted something new on YouTube!**\n"
+                      f"Go check it out 👇\n"
+                      f"{link}"
+                  )
 
-              body = json.dumps({'username': 'YouTube Alerts',
-                                 'content': content}).encode()
-              wh_req = urllib.request.Request(wh, body,
-                      {'Content-Type': 'application/json',
-                       'User-Agent': 'YouTubeAlerts/1.0 (github-actions)'})
-              urllib.request.urlopen(wh_req, timeout=15)
-              label = "LIVE" if is_live else "Upload"
-              print(f'Posted ({label}): {title}')
+              # --------------------------------------------------
+              # Send Discord webhook
+              # --------------------------------------------------
 
-          json.dump(list(seen)[-500:], open(sf, 'w'))
+              body = json.dumps({
+                  "username": "YouTube Alerts",
+                  "content": content,
+                  "allowed_mentions": {
+                      "roles": [ROLE_ID]
+                  }
+              }).encode("utf-8")
+
+              webhook_request = urllib.request.Request(
+                  WEBHOOK,
+                  data=body,
+                  headers={
+                      "Content-Type": "application/json",
+                      "User-Agent": "YouTubeAlerts/1.0 (GitHub Actions)"
+                  },
+                  method="POST"
+              )
+
+              try:
+                  with urllib.request.urlopen(
+                      webhook_request,
+                      timeout=20
+                  ) as response:
+
+                      print(
+                          f"Discord webhook response: "
+                          f"{response.status}"
+                      )
+
+              except urllib.error.HTTPError as e:
+                  print(f"Discord webhook failed: {e.code}")
+                  print(
+                      e.read().decode(errors="ignore")
+                  )
+                  raise
+
+              label = "LIVE" if is_live else "UPLOAD"
+
+              print(
+                  f"Posted {label}: {title}"
+              )
+
+          # --------------------------------------------------
+          # Save seen videos
+          # --------------------------------------------------
+
+          # Keep only the latest 500 IDs.
+          # The playlist API returns newest videos first,
+          # so this prevents the file from growing forever.
+
+          seen_list = list(seen)[-500:]
+
+          with open(SEEN_FILE, "w") as f:
+              json.dump(
+                  seen_list,
+                  f,
+                  indent=2
+              )
+
+          print(
+              f"Saved {len(seen_list)} seen videos."
+          )
+
           SCRIPT
 
-      - name: Run
+      - name: Run YouTube checker
         env:
           PLAYLIST_ID: ${{ secrets.YT_PLAYLIST_ID }}
           CHANNEL_NAME: ${{ secrets.YT_CHANNEL_NAME }}
@@ -93,3 +253,17 @@ jobs:
           YT_API_KEY: ${{ secrets.YT_API_KEY }}
         run: |
           python3 poll.py
+
+      - name: Save notification state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add seen.json
+
+          if git diff --cached --quiet; then
+            echo "No changes to seen.json."
+          else
+            git commit -m "Update YouTube notification state"
+            git push
+          fi
