@@ -48,16 +48,14 @@ jobs:
               try:
                   with urllib.request.urlopen(req, timeout=20) as response:
                       return json.loads(response.read())
+
               except urllib.error.HTTPError as e:
-                  print(f"YouTube API HTTP error: {e.code}")
+                  print(f"API HTTP error: {e.code}")
                   print(e.read().decode(errors="ignore"))
-                  raise
-              except Exception as e:
-                  print(f"Request failed: {e}")
                   raise
 
           # --------------------------------------------------
-          # Load previously seen videos
+          # Load seen videos
           # --------------------------------------------------
 
           if os.path.exists(SEEN_FILE):
@@ -65,7 +63,7 @@ jobs:
                   with open(SEEN_FILE, "r") as f:
                       seen = set(json.load(f))
               except Exception:
-                  print("seen.json could not be read. Starting fresh.")
+                  print("Could not read seen.json. Starting fresh.")
                   seen = set()
           else:
               seen = set()
@@ -76,7 +74,7 @@ jobs:
           print(f"First run: {first_run}")
 
           # --------------------------------------------------
-          # Get latest videos from playlist
+          # Get latest playlist videos
           # --------------------------------------------------
 
           playlist_url = (
@@ -86,7 +84,6 @@ jobs:
           )
 
           data = get_json(playlist_url)
-
           items = data.get("items", [])
 
           print(f"Videos returned by YouTube: {len(items)}")
@@ -95,9 +92,8 @@ jobs:
           # Process videos
           # --------------------------------------------------
 
-          new_videos = []
-
           for item in items:
+
               snippet = item.get("snippet", {})
               resource = snippet.get("resourceId", {})
 
@@ -109,27 +105,8 @@ jobs:
               title = snippet.get("title", "Untitled")
               link = f"https://www.youtube.com/watch?v={video_id}"
 
-              # Already processed
-              if video_id in seen:
-                  continue
-
-              print(f"New video found: {title}")
-
-              # Mark it as seen immediately
-              seen.add(video_id)
-              new_videos.append(video_id)
-
               # --------------------------------------------------
-              # Do not notify on the first run.
-              # This prevents old videos from spamming Discord.
-              # --------------------------------------------------
-
-              if first_run:
-                  print(f"First run - adding without notification: {title}")
-                  continue
-
-              # --------------------------------------------------
-              # Check whether the video is currently live
+              # Check whether video is currently LIVE
               # --------------------------------------------------
 
               is_live = False
@@ -143,6 +120,7 @@ jobs:
               video_data = get_json(video_url)
 
               if video_data.get("items"):
+
                   video = video_data["items"][0]
 
                   live_details = video.get(
@@ -150,17 +128,58 @@ jobs:
                       {}
                   )
 
-                  actual_start = live_details.get("actualStartTime")
-                  actual_end = live_details.get("actualEndTime")
+                  actual_start = live_details.get(
+                      "actualStartTime"
+                  )
+
+                  actual_end = live_details.get(
+                      "actualEndTime"
+                  )
 
                   if actual_start and not actual_end:
                       is_live = True
 
               # --------------------------------------------------
-              # Build Discord notification
+              # Already seen
+              #
+              # EXCEPTION:
+              # If it is currently LIVE, we still need to make
+              # sure an existing livestream gets announced.
+              # --------------------------------------------------
+
+              if video_id in seen:
+
+                  if not is_live:
+                      continue
+
+                  print(
+                      f"Existing video is currently LIVE: {title}"
+                  )
+
+              # --------------------------------------------------
+              # First run
+              #
+              # Existing normal uploads are ignored.
+              # Existing LIVE streams are announced.
+              # --------------------------------------------------
+
+              if first_run and not is_live:
+
+                  seen.add(video_id)
+
+                  print(
+                      f"First run - adding without notification: "
+                      f"{title}"
+                  )
+
+                  continue
+
+              # --------------------------------------------------
+              # Send notification
               # --------------------------------------------------
 
               if is_live:
+
                   content = (
                       f"📢 <@&{ROLE_ID}> "
                       f"**{CHANNEL_NAME} is LIVE on YouTube!**\n"
@@ -169,16 +188,14 @@ jobs:
                   )
 
               else:
+
                   content = (
                       f"📢 <@&{ROLE_ID}> "
-                      f"**{CHANNEL_NAME} just posted something new on YouTube!**\n"
+                      f"**{CHANNEL_NAME} just posted something new "
+                      f"on YouTube!**\n"
                       f"Go check it out 👇\n"
                       f"{link}"
                   )
-
-              # --------------------------------------------------
-              # Send Discord webhook
-              # --------------------------------------------------
 
               body = json.dumps({
                   "username": "YouTube Alerts",
@@ -199,6 +216,7 @@ jobs:
               )
 
               try:
+
                   with urllib.request.urlopen(
                       webhook_request,
                       timeout=20
@@ -210,25 +228,35 @@ jobs:
                       )
 
               except urllib.error.HTTPError as e:
-                  print(f"Discord webhook failed: {e.code}")
+
+                  print(
+                      f"Discord webhook failed: {e.code}"
+                  )
+
                   print(
                       e.read().decode(errors="ignore")
                   )
+
                   raise
 
-              label = "LIVE" if is_live else "UPLOAD"
+              # --------------------------------------------------
+              # Mark video as seen
+              # --------------------------------------------------
 
-              print(
-                  f"Posted {label}: {title}"
-              )
+              seen.add(video_id)
+
+              if is_live:
+                  print(
+                      f"Posted LIVE notification: {title}"
+                  )
+              else:
+                  print(
+                      f"Posted upload notification: {title}"
+                  )
 
           # --------------------------------------------------
           # Save seen videos
           # --------------------------------------------------
-
-          # Keep only the latest 500 IDs.
-          # The playlist API returns newest videos first,
-          # so this prevents the file from growing forever.
 
           seen_list = list(seen)[-500:]
 
