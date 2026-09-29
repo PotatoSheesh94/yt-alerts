@@ -198,7 +198,7 @@ jobs:
                   )
 
               body = json.dumps({
-                  "username": "YouTube Alerts",
+                  "username": "Nickolas Lilly Assistant",
                   "content": content,
                   "allowed_mentions": {
                       "roles": [ROLE_ID]
